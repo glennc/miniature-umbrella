@@ -1,0 +1,99 @@
+﻿@page "/"
+@inject IHttpClientFactory ClientFactory
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<AuthorizeView>
+    <NotAuthorized>
+        <p role="alert">Login to see your todos</p>
+    </NotAuthorized>
+    <Authorized>
+        @if(todos == null)
+        {
+            @*<p><em>Loading...</em></p>*@
+        }
+        else
+        {
+            <div class="page-content page-container" id="page-content">
+                <div class="padding">
+                    <div class="row container d-flex justify-content-center">
+                        <div class="col-md-12">
+                            <div class="card px-3">
+                                <div class="card-body">
+                                    <h4 class="card-title">Todo list</h4>
+                                    <div class="add-items d-flex">
+                                        <input type="text" class="form-control todo-list-input" @bind=todo.Title placeholder="What do you need to do?">
+                                        <button class="add btn btn-primary font-weight-bold todo-list-add-btn" @onclick="CreateTodo">Add</button>
+                                    </div>
+                                    <div class="list-wrapper">
+                                        <ul class="d-flex flex-column-reverse todo-list">
+                                            @foreach (var todo in todos)
+                                            {
+                                                <li class="@(todo.IsComplete ? "completed" : "")">
+                                                    <div class="form-check">
+                                                        <label class="form-check-label">
+                                                            <input class="checkbox" @onchange="@(_ => UpdateCompleted(todo))" type="checkbox" checked=@todo.IsComplete>@todo.Title<i class="input-helper"></i>
+                                                        </label>
+                                                    </div>
+                                                    <i class="remove mdi mdi-close-circle-outline" @onclick="@(_ => DeleteTodo(todo))"></i>
+                                                </li>
+                                            }
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </Authorized>
+</AuthorizeView>
+
+@code {
+    private Todo todo = new Todo();
+    private List<Todo> todos;
+
+    private HttpClient _client;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        if (authState.User.Identity.IsAuthenticated)
+        {
+            _client = ClientFactory.CreateClient("todoapi"); //Maybe a typed client would be better? Remove string keys.
+
+            todos = await _client.GetFromJsonAsync<List<Todo>>("/");
+        }
+    }
+
+    private async Task CreateTodo()
+    {
+        todos.Add(todo);
+
+        var result = await _client.PostAsJsonAsync("/addtodo", todo);
+        //todo: Handle failures.
+
+        todo = new Todo();
+
+    }
+
+    private async Task DeleteTodo(Todo todo)
+    {
+        var result = await _client.PostAsJsonAsync("/deletetodo", todo);
+
+        todos.Remove(todo);
+    }
+
+    private async Task UpdateCompleted(Todo todo)
+    {
+        todo.IsComplete = !todo.IsComplete;
+        var result = await _client.PostAsJsonAsync("/updatecomplete", todo);
+    }
+
+    public class Todo
+    {
+        public string Id { get; set; }
+        public string Title { get; set; }
+        public bool IsComplete { get; set; }
+    }
+}
